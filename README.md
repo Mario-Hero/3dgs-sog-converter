@@ -1,14 +1,11 @@
 # 3DGS → SOG 转换器
 *3DGS → SOG Converter*
 
-一个带图形界面的开源小工具，用于把 3D Gaussian Splatting 场景批量转换为 PlayCanvas 的 SOG 格式，压缩大小。 
-A small open-source desktop GUI for batch-converting 3D Gaussian Splatting scenes into PlayCanvas SOG files for smaller size.
+一个带图形界面的开源小工具，用于把 3D Gaussian Splatting 场景批量转换为 PlayCanvas 的 SOG 格式或压缩后的PLY格式，用于减小文件大小。 
+A small open-source desktop GUI for batch-converting 3D Gaussian Splatting scenes into PlayCanvas SOG files or compressed PLY for smaller size.
 
 支持 `.ply`（含 `.compressed.ply`）、`.spz`、`.splat`、`.ksplat`。
 Supported: `.ply` (including `.compressed.ply`), `.spz`, `.splat`, `.ksplat`.
-
-界面左上角可在两种导出格式之间切换：**压缩 SOG (.sog)** 或 **压缩 PLY (.compressed.ply)**。
-Pick the export format from the top-left of the window: **Compressed SOG (.sog)** or **Compressed PLY (.compressed.ply)**.
 
 ![中文界面](assets/screenshot-zh.png)  
 ![English UI](assets/screenshot-en.png)
@@ -21,8 +18,8 @@ Measured results for one 64 MB SH0 PLY containing 1,179,648 Gaussians.
 | --- | --- | --- |
 | 原始 PLY / Raw PLY | 1,179,648 | 64 MB |
 | SOG（保持原样） (keep all) | 1,179,648 | 11.6 MB |
-| SOG（减点到 400K） (decimated to 400K) | 400,000 | 4.5 MB |
 | 压缩 PLY（保持原样） (keep all) | 1,179,648 | 18.3 MB |
+| SOG（减点到 400K） (decimated to 400K) | 400,000 | 4.5 MB |
 | 压缩 PLY（减点到 400K） (decimated to 400K) | 400,000 | 6.2 MB |
 
 ## 运行要求 Requirements
