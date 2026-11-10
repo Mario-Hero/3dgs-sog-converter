@@ -47,7 +47,6 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "log_result": "  [{status}] {message}",
         # ---- gui: chrome ----
         "app_title": "3DGS → SOG Converter",
-        "lang_badge": "中文",
         "cli_detecting": "检测工具中…",
         "btn_locate_tool": "定位工具…",
         "dlg_locate_tool": "选择 splat-transform 可执行文件",
@@ -154,7 +153,6 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "log_result": "  [{status}] {message}",
         # ---- gui: chrome ----
         "app_title": "3DGS → SOG Converter",
-        "lang_badge": "English",
         "cli_detecting": "Detecting tool…",
         "btn_locate_tool": "Locate tool…",
         "dlg_locate_tool": "Select the splat-transform executable",

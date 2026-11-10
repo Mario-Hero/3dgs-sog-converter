@@ -27,7 +27,6 @@ class ConverterApp(tk.Tk):
         super().__init__()
         self.title_text = i18n.t("app_title")
         self.title(self.title_text)
-        self.geometry("960x760")
         self.minsize(860, 680)
         self._apply_dpi_scaling()
 
@@ -39,6 +38,12 @@ class ConverterApp(tk.Tk):
         self._poll_after_id: str | None = None
 
         self._build_widgets()
+        self.update_idletasks()
+        # Size the window to its real content instead of a hard-coded height,
+        # otherwise the bottom action buttons overflow and get clipped.
+        fit_w = max(960, self.winfo_reqwidth())
+        fit_h = max(680, self.winfo_reqheight())
+        self.geometry(f"{fit_w}x{fit_h}")
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.after(80, self._poll_queue)
         self._refresh_cli_status()
@@ -107,8 +112,6 @@ class ConverterApp(tk.Tk):
 
         header = ttk.Frame(root)
         header.grid(row=row, column=0, sticky="ew", pady=(0, 10))
-        ttk.Label(header, text=i18n.t("lang_badge"),
-                  foreground="#777777").pack(side=tk.LEFT)
         self.cli_browse = ttk.Button(header, text=i18n.t("btn_locate_tool"),
                                      command=self._browse_cli)
         self.cli_browse.pack(side=tk.RIGHT, padx=(8, 0))
