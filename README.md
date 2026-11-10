@@ -31,6 +31,10 @@ Windows / macOS / Linux
 | Node.js | 18+ | 用于运行 `splat-transform`。<br/>Required to run `splat-transform`. |
 | npm | 随 Node.js / bundled | 全局安装 CLI。 <br/>Used to install the CLI globally. |
 
+## 便携版（免安装） Portable release（免安装）
+不想装 Python 和 Node？下载 Release 里的 `3dgs-sog-converter-win64.zip`，解压后双击 `3dgs_sog_converter.exe` 即可，Python、Node.js 与 splat-transform 都已打包在内。可运行 `build_release.py` 自行重新打包。
+Don't want to install Python and Node? Grab `3dgs-sog-converter-win64.zip` from the Releases page — Python, Node.js and splat-transform are all bundled; just unzip and double-click `3dgs_sog_converter.exe`. Rebuild it yourself with `build_release.py`.
+
 ## 安装 Installation
 ```bash
 # 安装转换引擎

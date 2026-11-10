@@ -113,7 +113,7 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "warn_some_failed": "完成，但有 {failed} 个任务失败，请查看日志。",
         "info_all_skipped": "没有文件被转换（目标文件均已存在）。\n可勾选「覆盖已存在的输出文件」。",
         # ---- gui: log ----
-        "log_hint": "提示: 首次使用请先安装 Node.js 与 @playcanvas/splat-transform（见 README）。",
+        "log_hint": "提示: 若上方未显示转换工具版本，请点击右上角“定位工具…”手动指定 splat-transform。",
         "log_cli_missing": (
             "错误: 未找到 splat-transform。请执行 npm install -g @playcanvas/splat-transform，"
             "或设置环境变量 SPLAT_TRANSFORM 指向可执行文件。"
@@ -225,7 +225,7 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "warn_some_failed": "Finished, but {failed} task(s) failed. Check the log.",
         "info_all_skipped": "Nothing was converted (all targets already exist).\nEnable 'Overwrite existing output files' to replace them.",
         # ---- gui: log ----
-        "log_hint": "Hint: first-time setup requires Node.js and @playcanvas/splat-transform (see README).",
+        "log_hint": "Hint: if no tool version is shown above, use “Locate tool…” (top right) to point at splat-transform.",
         "log_cli_missing": (
             "Error: splat-transform not found. Run npm install -g @playcanvas/splat-transform, "
             "or set the SPLAT_TRANSFORM environment variable to the executable."

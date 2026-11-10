@@ -16,6 +16,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -186,6 +187,30 @@ def save_cli_config(cli: str) -> None:
         pass
 
 
+def _app_base_dir() -> Path:
+    """Directory that may hold bundled resources.
+
+    For a frozen (PyInstaller) build this is the folder containing the .exe;
+    in a source checkout it is the project root (parent of ``sog_converter``).
+    """
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent.parent
+
+
+def _bundled_cli() -> Optional[str]:
+    """Return the packaged ``tools/splat-transform`` launcher, if present.
+
+    Release builds ship a self-contained Node runtime plus splat-transform
+    under ``tools/`` so end users need nothing installed.
+    """
+    for name in ("splat-transform.cmd", "splat-transform.exe", "splat-transform"):
+        cand = _app_base_dir() / "tools" / name
+        if cand.is_file():
+            return str(cand)
+    return None
+
+
 def _cli_names() -> List[str]:
     """Candidate executable names, preferring a Windows launcher."""
     if os.name == "nt":
@@ -276,6 +301,10 @@ def find_cli() -> Optional[str]:
     if cfg:
         return _prefer_cmd(cfg)
 
+    bundled = _bundled_cli()
+    if bundled:
+        return bundled
+
     for name in _cli_names():
         found = shutil.which(name)
         if found:
@@ -364,10 +393,16 @@ _ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 def _run(cmd: Sequence[str], log: LogFn, cancel: CancelFn) -> None:
     """Run a command, stream its output to log, and support mid-flight cancel."""
     log("$ " + subprocess.list2cmdline(list(cmd)))
+    # In a windowed (frozen) build there is no console; suppress the child's
+    # console window so the bundled .cmd launcher does not flash a black box.
+    creationflags = 0
+    if os.name == "nt":
+        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     try:
         proc = subprocess.Popen(
             list(cmd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, encoding="utf-8", errors="replace", bufsize=1,
+            creationflags=creationflags,
         )
     except OSError as exc:
         raise ConversionError(i18n.t("err_launch", error=exc)) from exc
