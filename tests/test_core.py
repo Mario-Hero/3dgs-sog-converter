@@ -110,6 +110,53 @@ class CliDiscoveryTests(unittest.TestCase):
             with mock.patch.object(core.shutil, "which", return_value="/custom/splat"):
                 self.assertEqual(core.find_cli(), "/custom/splat")
 
+    def test_finds_cli_in_candidate_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            (d / "splat-transform.cmd").write_text("@echo off")
+            with mock.patch.dict(os.environ, {}, clear=True), \
+                 mock.patch.object(core.shutil, "which", return_value=None), \
+                 mock.patch.object(core, "load_cli_config", return_value=None), \
+                 mock.patch.object(core, "_candidate_cli_dirs", return_value=[str(d)]):
+                self.assertEqual(core.find_cli(), str(d / "splat-transform.cmd"))
+
+    def test_returns_none_when_absent(self):
+        with mock.patch.dict(os.environ, {}, clear=True), \
+             mock.patch.object(core.shutil, "which", return_value=None), \
+             mock.patch.object(core, "load_cli_config", return_value=None), \
+             mock.patch.object(core, "_candidate_cli_dirs", return_value=[]):
+            self.assertIsNone(core.find_cli())
+
+    def test_config_roundtrip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = Path(tmp) / ".3dgs_sog_converter.json"
+            tool = Path(tmp) / "splat-transform.cmd"
+            tool.write_text("@echo off")
+            with mock.patch.object(core, "_config_path", return_value=cfg):
+                core.save_cli_config(str(tool))
+                self.assertEqual(core.load_cli_config(), str(tool))
+
+    def test_config_ignores_missing_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = Path(tmp) / ".3dgs_sog_converter.json"
+            with mock.patch.object(core, "_config_path", return_value=cfg):
+                self.assertIsNone(core.load_cli_config())
+
+    @unittest.skipUnless(os.name == "nt", "Windows-only .cmd preference")
+    def test_prefer_cmd_on_windows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            (d / "splat-transform").write_text("#!/bin/sh")
+            (d / "splat-transform.cmd").write_text("@echo off")
+            self.assertEqual(
+                core._prefer_cmd(str(d / "splat-transform")),
+                str(d / "splat-transform.cmd"),
+            )
+            self.assertEqual(
+                core._prefer_cmd(str(d / "splat-transform.cmd")),
+                str(d / "splat-transform.cmd"),
+            )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

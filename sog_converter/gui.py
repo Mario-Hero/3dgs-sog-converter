@@ -23,12 +23,13 @@ MAX_LOG_LINES = 2000
 
 class ConverterApp(tk.Tk):
     def __init__(self) -> None:
+        self._enable_high_dpi()
         super().__init__()
         self.title_text = i18n.t("app_title")
         self.title(self.title_text)
         self.geometry("960x760")
         self.minsize(860, 680)
-        self._enable_windows_dpi()
+        self._apply_dpi_scaling()
 
         self.cli: str | None = core.find_cli()
         self.queue: queue.Queue = queue.Queue()
@@ -52,13 +53,47 @@ class ConverterApp(tk.Tk):
         self.destroy()
 
     @staticmethod
-    def _enable_windows_dpi() -> None:
+    def _enable_high_dpi() -> None:
+        """Declare DPI awareness before any window is created.
+
+        Must run before ``tkinter.Tk()`` so the OS reports the true monitor
+        DPI instead of bitmap-stretching the window (which makes it tiny or
+        blurry on high-DPI displays).
+        """
         if os.name != "nt":
             return
         try:
             import ctypes
 
-            ctypes.windll.shcore.SetProcessDpiAwareness(1)
+            # PROCESS_PER_MONITOR_DPI_AWARE_V2 (best) -> per-monitor -> system.
+            try:
+                ctypes.windll.shcore.SetProcessDpiAwarenessContext(-4)
+            except (AttributeError, OSError):
+                try:
+                    ctypes.windll.shcore.SetProcessDpiAwareness(2)
+                except (AttributeError, OSError):
+                    ctypes.windll.user32.SetProcessDPIAware()
+        except (AttributeError, OSError):
+            pass
+
+    def _apply_dpi_scaling(self) -> None:
+        """Ask Tk to scale fonts to the real monitor DPI.
+
+        Tk only knows the default (96 DPI) font metrics unless we tell it the
+        physical DPI, so a 150% display would otherwise show tiny text.
+        """
+        if os.name != "nt":
+            return
+        try:
+            import ctypes
+
+            self.update_idletasks()
+            hwnd = self.winfo_id()
+            dpi = ctypes.windll.user32.GetDpiForWindow(hwnd) if hwnd else 0
+            if not dpi or dpi <= 0:
+                dpi = ctypes.windll.user32.GetDpiForSystem()
+            if dpi and dpi > 0:
+                self.tk.call("tk", "scaling", "-displayof", ".", dpi / 72.0)
         except (AttributeError, OSError):
             pass
 
@@ -72,10 +107,11 @@ class ConverterApp(tk.Tk):
 
         header = ttk.Frame(root)
         header.grid(row=row, column=0, sticky="ew", pady=(0, 10))
-        ttk.Label(header, text=self.title_text,
-                  font=("TkDefaultFont", 14, "bold")).pack(side=tk.LEFT)
         ttk.Label(header, text=i18n.t("lang_badge"),
-                  foreground="#777777").pack(side=tk.LEFT, padx=(10, 0))
+                  foreground="#777777").pack(side=tk.LEFT)
+        self.cli_browse = ttk.Button(header, text=i18n.t("btn_locate_tool"),
+                                     command=self._browse_cli)
+        self.cli_browse.pack(side=tk.RIGHT, padx=(8, 0))
         self.cli_label = ttk.Label(header, text=i18n.t("cli_detecting"),
                                    foreground="#666666")
         self.cli_label.pack(side=tk.RIGHT)
@@ -272,6 +308,21 @@ class ConverterApp(tk.Tk):
         path = filedialog.askdirectory(title=i18n.t("dlg_output"))
         if path:
             self.output_var.set(path)
+
+    def _browse_cli(self) -> None:
+        path = filedialog.askopenfilename(
+            title=i18n.t("dlg_locate_tool"),
+            filetypes=[
+                (i18n.t("dlg_tool_filetypes"), "*.cmd *.exe *.bat *.ps1"),
+                (i18n.t("dlg_all_files"), "*.*"),
+            ],
+        )
+        if not path:
+            return
+        self.cli = path
+        core.save_cli_config(path)
+        self._log(i18n.t("log_cli_set", cli=path))
+        self._refresh_cli_status()
 
     def _open_output(self) -> None:
         path = Path(self.output_var.get().strip() or ".")

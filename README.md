@@ -28,6 +28,10 @@ The interface follows the OS language or an explicit command-line flag; this REA
   Every output is written to a temporary file and atomically replaced, so a failed conversion never damages an existing file.
 - 中英文界面与日志同步切换，MIT 许可。  
   UI and log messages switch language together; released under the MIT License.
+- 自动查找 `splat-transform`；找不到时可用「定位工具…」按钮手动指定并记住。  
+  Auto-discovers `splat-transform`, with a "Locate tool…" button as a manual fallback that is remembered.
+- 按系统 DPI 缩放（高分屏清晰不偏小），支持 Windows / macOS / Linux。  
+  Scales to the system DPI for crisp high-DPI rendering; works on Windows, macOS and Linux.
 
 ## 界面语言
 *Interface language*
@@ -131,8 +135,14 @@ chmod +x run.sh
 python app.py
 ```
 
-窗口右上角会显示检测到的 CLI 版本。若显示红色的「未找到 splat-transform」，可设置 `SPLAT_TRANSFORM` 指向可执行文件。  
-The top-right corner shows the detected CLI version. If it reports the CLI as missing, point `SPLAT_TRANSFORM` at the executable.
+工具自动查找：程序会按 `SPLAT_TRANSFORM` 环境变量、上次的手动指定、`PATH`，以及 npm 全局目录（`npm prefix -g`）、`%APPDATA%\npm` 等常见位置依次查找 `splat-transform`；在 Windows 上优先使用 `.cmd` 启动器。  
+Auto-discovery: the app searches, in order, the `SPLAT_TRANSFORM` variable, the last manual pick, the `PATH`, and common global-install folders such as `npm prefix -g` and `%APPDATA%\npm`; on Windows it prefers the `.cmd` launcher.
+
+窗口右上角会显示检测到的 CLI 版本；若显示红色的「未找到 splat-transform」，点右侧的「定位工具…」按钮手动选择其可执行文件（选择后会被记住，下次自动复用），或设置下面的环境变量。  
+The top-right corner shows the detected CLI version. If it reports the CLI as missing, click the "Locate tool…" button on the right to pick the executable manually (saved for next launch), or set the environment variable below.
+
+> 提示：通过某些工具（如 WorkBuddy 自带的 Node）全局安装时，`splat-transform` 可能在系统登录 PATH 之外，双击 `run.bat` 时会找不到；此时用「定位工具…」按钮一次即可永久解决。  
+> Note: when installed through a bundled Node (e.g. WorkBuddy's), the tool can sit outside your login PATH and won't be found when you double-click `run.bat`; the "Locate tool…" button fixes it permanently in one click.
 
 ```bash
 # Windows PowerShell
@@ -271,6 +281,15 @@ print(report.converted, report.skipped, report.failed)
 
 确认 `npm install -g @playcanvas/splat-transform` 已执行，且 npm 全局 bin 目录在 PATH 中；也可设置 `SPLAT_TRANSFORM`。  
 Ensure `npm install -g @playcanvas/splat-transform` has run and npm's global bin is on PATH, or set `SPLAT_TRANSFORM`.
+
+部分全局安装（如 WorkBuddy 自带 Node）会把工具放在登录 PATH 之外，双击 `run.bat` 时检测不到；直接点窗口右上角的「定位工具…」按钮选一次即可永久记住。  
+Some global installs (e.g. WorkBuddy's bundled Node) place the tool outside your login PATH, so it is missed when you double-click `run.bat`; just click "Locate tool…" in the top-right once to remember it permanently.
+
+**问：界面在高分屏（4K / 缩放 150%）上偏小或模糊？**  
+**Q: The UI looks tiny or blurry on a high-DPI (4K / 150%) display?**
+
+程序已按系统 DPI 做适配（Windows 每显示器感知 + Tk 字体缩放），无需手动设置。若仍有偏差，请确认系统缩放为推荐值。  
+The app already adapts to the system DPI (per-monitor awareness on Windows plus Tk font scaling), so no manual tweaking is needed. If it still looks off, keep the OS scaling at its recommended value.
 
 **问：中文路径或带空格的路径能处理吗？**  
 **Q: Do non-ASCII or spaced paths work?**

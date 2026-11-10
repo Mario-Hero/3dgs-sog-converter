@@ -11,6 +11,8 @@ User-facing strings are translated through :mod:`sog_converter.i18n`.
 from __future__ import annotations
 
 import ctypes
+import glob
+import json
 import os
 import re
 import shutil
@@ -32,8 +34,10 @@ __all__ = [
     "cli_version",
     "collect_inputs",
     "find_cli",
+    "load_cli_config",
     "plan_jobs",
     "run_conversion",
+    "save_cli_config",
 ]
 
 INPUT_SUFFIXES = {".ply", ".spz", ".splat", ".ksplat"}
@@ -133,20 +137,145 @@ class Report:
         return len(self.results)
 
 
+CONFIG_NAME = ".3dgs_sog_converter.json"
+
+
+def _config_path() -> Path:
+    return Path.home() / CONFIG_NAME
+
+
+def load_cli_config() -> Optional[str]:
+    """Return a previously saved manual tool path, if still valid."""
+    try:
+        path = _config_path()
+        if not path.is_file():
+            return None
+        data = json.loads(path.read_text(encoding="utf-8"))
+        cli = data.get("cli")
+        if cli and Path(cli).expanduser().is_file():
+            return str(Path(cli).expanduser())
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def save_cli_config(cli: str) -> None:
+    """Persist a manually chosen tool path for future launches."""
+    try:
+        path = _config_path()
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            data = {}
+        data["cli"] = str(cli)
+        path.write_text(
+            json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+    except OSError:
+        pass
+
+
+def _cli_names() -> List[str]:
+    """Candidate executable names, preferring a Windows launcher."""
+    if os.name == "nt":
+        return [
+            "splat-transform.cmd",
+            "splat-transform.exe",
+            "splat-transform.bat",
+            "splat-transform",
+        ]
+    return ["splat-transform"]
+
+
+def _prefer_cmd(path: str) -> str:
+    """On Windows, prefer the .cmd launcher over an extensionless bash script."""
+    if os.name == "nt":
+        ext = os.path.splitext(path)[1].lower()
+        if ext not in (".cmd", ".exe", ".bat", ".ps1"):
+            cand = path + ".cmd"
+            if os.path.isfile(cand):
+                return cand
+    return path
+
+
+def _candidate_cli_dirs() -> List[str]:
+    """Directories likely to contain a global splat-transform install."""
+    dirs: List[str] = []
+
+    # npm global prefix: on Windows the launcher lives directly in this dir.
+    try:
+        proc = subprocess.run(
+            ["npm", "prefix", "-g"], capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=15,
+        )
+        if proc.returncode == 0:
+            d = proc.stdout.strip()
+            if d and Path(d).is_dir():
+                dirs.append(d)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+    appdata = os.environ.get("APPDATA")
+    if appdata:
+        dirs.append(os.path.join(appdata, "npm"))
+    localappdata = os.environ.get("LOCALAPPDATA")
+    if localappdata:
+        dirs.append(os.path.join(localappdata, "npm"))
+
+    # WorkBuddy bundled Node versions (this machine's layout).
+    for d in sorted(
+        glob.glob(str(Path.home() / ".workbuddy" / "binaries" / "node"
+                     / "versions" / "*")), reverse=True
+    ):
+        if os.path.isdir(d):
+            dirs.append(d)
+
+    for d in ("C:\\Program Files\\nodejs", "C:\\nodejs", "C:\\ProgramData\\npm"):
+        if os.path.isdir(d):
+            dirs.append(d)
+
+    seen: set = set()
+    out: List[str] = []
+    for d in dirs:
+        if d not in seen:
+            seen.add(d)
+            out.append(d)
+    return out
+
+
 def find_cli() -> Optional[str]:
-    """Locate splat-transform, honouring an explicit override."""
+    """Locate splat-transform, honouring overrides then common install paths.
+
+    Resolution order:
+        1. ``SPLAT_TRANSFORM`` environment variable
+        2. a tool path saved through the GUI "Locate tool" button
+        3. the system ``PATH`` (preferring the Windows ``.cmd`` launcher)
+        4. well-known global-install directories (npm prefix, AppData, etc.)
+    """
     override = os.environ.get("SPLAT_TRANSFORM")
     if override:
         path = Path(override).expanduser()
         if path.is_file():
-            return str(path)
+            return _prefer_cmd(str(path))
         found = shutil.which(override)
         if found:
-            return found
-    for name in ("splat-transform", "splat-transform.cmd", "splat-transform.exe"):
+            return _prefer_cmd(found)
+
+    cfg = load_cli_config()
+    if cfg:
+        return _prefer_cmd(cfg)
+
+    for name in _cli_names():
         found = shutil.which(name)
         if found:
-            return found
+            return _prefer_cmd(found)
+
+    exts = (".cmd", ".exe", ".bat", ".ps1", "") if os.name == "nt" else ("",)
+    for d in _candidate_cli_dirs():
+        for ext in exts:
+            cand = os.path.join(d, "splat-transform" + ext)
+            if os.path.isfile(cand):
+                return _prefer_cmd(cand)
     return None
 
 
