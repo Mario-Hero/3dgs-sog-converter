@@ -22,6 +22,8 @@ Measured results for one 64 MB SH0 PLY containing 1,179,648 Gaussians.
 | 原始 PLY / Raw PLY | 1,179,648 | 64 MB |
 | SOG（保持原样） (keep all) | 1,179,648 | 11.6 MB |
 | SOG（减点到 400K） (decimated to 400K) | 400,000 | 4.5 MB |
+| 压缩 PLY（保持原样） (keep all) | 1,179,648 | 18.3 MB |
+| 压缩 PLY（减点到 400K） (decimated to 400K) | 400,000 | 6.2 MB |
 
 ## 运行要求 Requirements
 Windows / macOS / Linux
