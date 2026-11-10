@@ -1,5 +1,5 @@
-# 3DGS → SOG 转换器
-*3DGS → SOG Converter*
+# PLY → 压缩 SOG/PLY 转换器
+*PLY → Compressed SOG/PLY Converter*
 
 一个带图形界面的开源小工具，用于把 3D Gaussian Splatting 场景批量转换为 PlayCanvas 的 SOG 格式或压缩后的PLY格式，用于减小文件大小。 
 A small open-source desktop GUI for batch-converting 3D Gaussian Splatting scenes into PlayCanvas SOG files or compressed PLY for smaller size.
