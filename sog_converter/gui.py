@@ -11,6 +11,7 @@ import os
 import queue
 import subprocess
 import sys
+import time
 import threading
 import tkinter as tk
 from pathlib import Path
@@ -36,6 +37,11 @@ class ConverterApp(tk.Tk):
         self.worker: threading.Thread | None = None
         self._replace_warned = False
         self._poll_after_id: str | None = None
+        # Time tracking for the elapsed / remaining display.
+        self._start_time: float = 0.0
+        self._done: int = 0
+        self._total: int = 0
+        self._time_after: str | None = None
 
         self._build_widgets()
         self.update_idletasks()
@@ -53,6 +59,11 @@ class ConverterApp(tk.Tk):
         if self._poll_after_id is not None:
             try:
                 self.after_cancel(self._poll_after_id)
+            except tk.TclError:
+                pass
+        if self._time_after is not None:
+            try:
+                self.after_cancel(self._time_after)
             except tk.TclError:
                 pass
         self.destroy()
@@ -229,6 +240,9 @@ class ConverterApp(tk.Tk):
         self.cancel_button.pack(side=tk.LEFT, padx=6)
         self.progress = ttk.Progressbar(actions, mode="determinate")
         self.progress.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=12)
+        self.time_var = tk.StringVar(value=i18n.t("time_idle"))
+        ttk.Label(actions, textvariable=self.time_var, width=30,
+                  anchor="e").pack(side=tk.RIGHT, padx=(0, 8))
         self.status_var = tk.StringVar(value=i18n.t("status_ready"))
         ttk.Label(actions, textvariable=self.status_var, width=16).pack(side=tk.RIGHT)
 
@@ -438,6 +452,13 @@ class ConverterApp(tk.Tk):
         self.progress.configure(value=0, maximum=len(jobs))
         self.status_var.set(i18n.t("status_running"))
 
+        # Start the elapsed / remaining time display.
+        self._start_time = time.time()
+        self._done = 0
+        self._total = len(jobs)
+        self._update_time()
+        self._time_after = self.after(1000, self._tick_time)
+
         cli = self.cli
         self.worker = threading.Thread(
             target=self._worker, args=(jobs, opts, cli), daemon=True
@@ -477,14 +498,20 @@ class ConverterApp(tk.Tk):
                     self._log(str(payload))
                 elif kind == "progress":
                     done, total, _ = payload
+                    self._done, self._total = done, total
                     self.progress.configure(value=done)
                     self.status_var.set(f"{done}/{total}")
+                    self._update_time()
                 elif kind == "done":
                     self._finish(payload)
                 elif kind == "cancelled":
+                    self._total = self._done
+                    self._update_time()
                     self._log(i18n.t("log_cancelled"))
                     self._reset_buttons(i18n.t("status_cancelled"))
                 elif kind == "fatal":
+                    self._total = self._done
+                    self._update_time()
                     self._log(i18n.t("log_error", message=payload))
                     messagebox.showerror(self.title_text, str(payload))
                     self._reset_buttons(i18n.t("status_error"))
@@ -493,6 +520,8 @@ class ConverterApp(tk.Tk):
         self._poll_after_id = self.after(80, self._poll_queue)
 
     def _finish(self, report: core.Report) -> None:
+        self._done = report.total
+        self._update_time()
         self._log(i18n.t("log_finish", converted=report.converted,
                          skipped=report.skipped, failed=report.failed,
                          total=report.total))
@@ -502,6 +531,38 @@ class ConverterApp(tk.Tk):
                 self.title_text, i18n.t("warn_some_failed", failed=report.failed))
         elif report.skipped and not report.converted:
             messagebox.showinfo(self.title_text, i18n.t("info_all_skipped"))
+
+    @staticmethod
+    def _fmt_duration(seconds: float) -> str:
+        """Format a duration as ``mm:ss`` or ``h:mm:ss``."""
+        seconds = int(seconds)
+        hours, rem = divmod(seconds, 3600)
+        minutes, secs = divmod(rem, 60)
+        if hours:
+            return f"{hours:d}:{minutes:02d}:{secs:02d}"
+        return f"{minutes:02d}:{secs:02d}"
+
+    def _update_time(self) -> None:
+        """Refresh the elapsed / remaining label from the tracked counters."""
+        if not self._start_time:
+            return
+        elapsed = time.time() - self._start_time
+        if self._done > 0 and self._total > 0 and self._done < self._total:
+            remain = elapsed * (self._total - self._done) / self._done
+            remain_str = self._fmt_duration(remain)
+        else:
+            remain_str = "--:--"
+        self.time_var.set(
+            i18n.t("time_format", elapsed=self._fmt_duration(elapsed), remain=remain_str)
+        )
+
+    def _tick_time(self) -> None:
+        """Re-render the time label every second while a job is running."""
+        if self.worker is not None and self.worker.is_alive():
+            self._update_time()
+            self._time_after = self.after(1000, self._tick_time)
+        else:
+            self._time_after = None
 
     def _reset_buttons(self, status: str) -> None:
         self.start_button.configure(state=tk.NORMAL)

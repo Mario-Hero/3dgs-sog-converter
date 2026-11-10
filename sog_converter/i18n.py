@@ -83,6 +83,8 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "status_cancelled": "已取消",
         "status_error": "出错",
         "status_done": "完成",
+        "time_format": "已用 {elapsed} · 剩余 {remain}",
+        "time_idle": "已用 --:-- · 剩余 --:--",
         # ---- gui: dialogs ----
         "dlg_open_files": "选择 3DGS 文件",
         "dlg_filetypes": "3DGS 文件",
@@ -189,6 +191,8 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "status_cancelled": "Cancelled",
         "status_error": "Error",
         "status_done": "Done",
+        "time_format": "Elapsed {elapsed} · Remaining {remain}",
+        "time_idle": "Elapsed --:-- · Remaining --:--",
         # ---- gui: dialogs ----
         "dlg_open_files": "Select 3DGS files",
         "dlg_filetypes": "3DGS files",
