@@ -5,6 +5,7 @@ This module has no GUI dependency. It shells out to the open source
 
 All file writes go through a temporary `.sog` file followed by an atomic
 ``os.replace`` so a failed conversion never damages an existing output.
+User-facing strings are translated through :mod:`sog_converter.i18n`.
 """
 
 from __future__ import annotations
@@ -18,6 +19,8 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterable, List, Optional, Sequence
+
+from . import i18n
 
 __all__ = [
     "Cancelled",
@@ -76,21 +79,21 @@ class Options:
         if self.decimate_mode == "count":
             value = int(self.decimate_value)
             if value <= 0:
-                raise ValueError("目标点数必须大于 0")
+                raise ValueError(i18n.t("err_target_positive"))
             return str(value)
         if self.decimate_mode == "percent":
             value = int(self.decimate_value)
             if not 1 <= value <= 99:
-                raise ValueError("保留百分比必须在 1 到 99 之间")
+                raise ValueError(i18n.t("err_percent_range"))
             return f"{value}%"
-        raise ValueError(f"未知的压缩模式: {self.decimate_mode}")
+        raise ValueError(i18n.t("err_unknown_mode", mode=self.decimate_mode))
 
     def validate(self) -> None:
         if not 0 <= int(self.webp_effort) <= 9:
-            raise ValueError("WebP 压缩强度必须在 0 到 9 之间")
+            raise ValueError(i18n.t("err_webp_range"))
         self.decimate_arg()
         if not self.replace_source and self.output_dir is None:
-            raise ValueError("请指定输出目录")
+            raise ValueError(i18n.t("err_output_required"))
         if not self.replace_source:
             self.output_dir = Path(self.output_dir).expanduser()
 
@@ -226,7 +229,7 @@ def _run(cmd: Sequence[str], log: LogFn, cancel: CancelFn) -> None:
             text=True, encoding="utf-8", errors="replace", bufsize=1,
         )
     except OSError as exc:
-        raise ConversionError(f"无法启动 splat-transform: {exc}") from exc
+        raise ConversionError(i18n.t("err_launch", error=exc)) from exc
 
     try:
         assert proc.stdout is not None
@@ -245,7 +248,7 @@ def _run(cmd: Sequence[str], log: LogFn, cancel: CancelFn) -> None:
             proc.stdout.close()
 
     if return_code != 0:
-        raise ConversionError(f"命令退出码 {return_code}")
+        raise ConversionError(i18n.t("err_exit_code", code=return_code))
 
 
 def send_to_trash(path: Path) -> bool:
@@ -298,10 +301,10 @@ def _convert_job(
     source, target = job.source, job.target
 
     if source.resolve() == target.resolve():
-        return Result(source, target, "skipped", "输出与输入为同一文件")
+        return Result(source, target, "skipped", i18n.t("skip_same_file"))
 
     if not opts.overwrite_existing and target.exists():
-        return Result(source, target, "skipped", "目标文件已存在（未勾选覆盖）")
+        return Result(source, target, "skipped", i18n.t("skip_exists"))
 
     tmp_out = target.with_name(f".{target.stem}.{TMP_MARKER}{OUTPUT_SUFFIX}")
     if tmp_out.exists():
@@ -322,10 +325,10 @@ def _convert_job(
                 if opts.filter_low_opacity:
                     cmd += ["-V", "opacity,gt,0.02"]
                 cmd += ["-d", decimate, "--scratch-dir", str(scratch), str(intermediate)]
-                log(f"[1/2] 减点 -> {decimate}")
+                log(i18n.t("log_step1", value=decimate))
                 _run(cmd, log, cancel)
                 if not intermediate.is_file():
-                    raise ConversionError("减点步骤未生成中间 PLY 文件")
+                    raise ConversionError(i18n.t("err_no_intermediate"))
                 sog_source = intermediate
 
             cmd = [cli]
@@ -333,22 +336,22 @@ def _convert_job(
                 cmd += ["-g", "cpu"]
             cmd += ["--webp-effort", str(int(opts.webp_effort))]
             cmd += [str(sog_source), str(tmp_out)]
-            log("[2/2] 编码 SOG" if decimate else "[1/1] 编码 SOG")
+            log(i18n.t("log_step2") if decimate else i18n.t("log_step_single"))
             _run(cmd, log, cancel)
 
         if not tmp_out.is_file() or tmp_out.stat().st_size == 0:
-            raise ConversionError("SOG 输出为空或不存在")
+            raise ConversionError(i18n.t("err_empty_output"))
 
         os.replace(str(tmp_out), str(target))
         size_mb = target.stat().st_size / 1048576
-        message = f"完成 -> {target.name} ({size_mb:.2f} MB)"
+        message = i18n.t("done", name=target.name, size=size_mb)
 
         if opts.replace_source and source.suffix.lower() != OUTPUT_SUFFIX:
             if send_to_trash(source):
-                message += "；原文件已移入回收站"
+                message += i18n.t("trashed")
             else:
-                message += "；原文件未删除（回收站不可用，请手动处理）"
-            log("  警告: 覆盖源文件模式已启用")
+                message += i18n.t("not_trashed")
+            log(i18n.t("warn_replace"))
         return Result(source, target, "converted", message)
 
     except Cancelled:
@@ -379,10 +382,10 @@ def run_conversion(
 
     for index, job in enumerate(jobs, start=1):
         check()
-        emit(f"--- [{index}/{total}] {job.source} ---")
+        emit(i18n.t("log_job", index=index, total=total, path=job.source))
         result = _convert_job(job, opts, cli, emit, check)
         report.results.append(result)
-        emit(f"  [{result.status}] {result.message}")
+        emit(i18n.t("log_result", status=result.status, message=result.message))
         if progress:
             progress(index, total, result)
     return report

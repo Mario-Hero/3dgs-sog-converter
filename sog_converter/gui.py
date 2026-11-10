@@ -1,28 +1,31 @@
 """Tkinter GUI for the 3DGS -> SOG converter.
 
-Standard library only. The conversion itself lives in ``core.py`` and is
-executed in a worker thread so the window stays responsive.
+Standard library only. All visible strings come from :mod:`sog_converter.i18n`,
+so the UI follows the OS language or an explicit ``--lang`` argument.
+The conversion itself lives in ``core.py`` and runs in a worker thread.
 """
 
 from __future__ import annotations
 
 import os
 import queue
+import subprocess
+import sys
 import threading
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 
-from . import core
+from . import core, i18n
 
-WINDOW_TITLE = "3DGS → SOG Converter"
 MAX_LOG_LINES = 2000
 
 
 class ConverterApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title(WINDOW_TITLE)
+        self.title_text = i18n.t("app_title")
+        self.title(self.title_text)
         self.geometry("960x760")
         self.minsize(860, 680)
         self._enable_windows_dpi()
@@ -32,10 +35,21 @@ class ConverterApp(tk.Tk):
         self.cancel_event = threading.Event()
         self.worker: threading.Thread | None = None
         self._replace_warned = False
+        self._poll_after_id: str | None = None
 
         self._build_widgets()
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.after(80, self._poll_queue)
         self._refresh_cli_status()
+
+    def _on_close(self) -> None:
+        """Cancel the polling timer before destroying the window."""
+        if self._poll_after_id is not None:
+            try:
+                self.after_cancel(self._poll_after_id)
+            except tk.TclError:
+                pass
+        self.destroy()
 
     @staticmethod
     def _enable_windows_dpi() -> None:
@@ -58,13 +72,17 @@ class ConverterApp(tk.Tk):
 
         header = ttk.Frame(root)
         header.grid(row=row, column=0, sticky="ew", pady=(0, 10))
-        ttk.Label(header, text=WINDOW_TITLE, font=("TkDefaultFont", 14, "bold")).pack(side=tk.LEFT)
-        self.cli_label = ttk.Label(header, text="检测工具中…", foreground="#666666")
+        ttk.Label(header, text=self.title_text,
+                  font=("TkDefaultFont", 14, "bold")).pack(side=tk.LEFT)
+        ttk.Label(header, text=i18n.t("lang_badge"),
+                  foreground="#777777").pack(side=tk.LEFT, padx=(10, 0))
+        self.cli_label = ttk.Label(header, text=i18n.t("cli_detecting"),
+                                   foreground="#666666")
         self.cli_label.pack(side=tk.RIGHT)
         row += 1
 
         # ---- input -----------------------------------------------------
-        inputs = ttk.LabelFrame(root, text=" 1. 输入（文件或文件夹） ", padding=10)
+        inputs = ttk.LabelFrame(root, text=i18n.t("frame_input"), padding=10)
         inputs.grid(row=row, column=0, sticky="ew", pady=4)
         inputs.columnconfigure(0, weight=1)
         row += 1
@@ -82,57 +100,63 @@ class ConverterApp(tk.Tk):
 
         buttons = ttk.Frame(inputs)
         buttons.grid(row=1, column=0, columnspan=4, sticky="w")
-        ttk.Button(buttons, text="添加文件…", command=self._add_files).pack(side=tk.LEFT, padx=(0, 6))
-        ttk.Button(buttons, text="添加文件夹…", command=self._add_folder).pack(side=tk.LEFT, padx=(0, 6))
-        ttk.Button(buttons, text="移除选中", command=self._remove_selected).pack(side=tk.LEFT, padx=(0, 6))
-        ttk.Button(buttons, text="清空", command=self._clear_inputs).pack(side=tk.LEFT)
+        ttk.Button(buttons, text=i18n.t("btn_add_files"),
+                   command=self._add_files).pack(side=tk.LEFT, padx=(0, 6))
+        ttk.Button(buttons, text=i18n.t("btn_add_folder"),
+                   command=self._add_folder).pack(side=tk.LEFT, padx=(0, 6))
+        ttk.Button(buttons, text=i18n.t("btn_remove"),
+                   command=self._remove_selected).pack(side=tk.LEFT, padx=(0, 6))
+        ttk.Button(buttons, text=i18n.t("btn_clear"),
+                   command=self._clear_inputs).pack(side=tk.LEFT)
         self.recursive_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(buttons, text="包含子文件夹", variable=self.recursive_var).pack(side=tk.LEFT, padx=(18, 0))
+        ttk.Checkbutton(buttons, text=i18n.t("chk_recursive"),
+                        variable=self.recursive_var).pack(side=tk.LEFT, padx=(18, 0))
 
         # ---- output ----------------------------------------------------
-        outputs = ttk.LabelFrame(root, text=" 2. 输出 ", padding=10)
+        outputs = ttk.LabelFrame(root, text=i18n.t("frame_output"), padding=10)
         outputs.grid(row=row, column=0, sticky="ew", pady=4)
         outputs.columnconfigure(1, weight=1)
         row += 1
 
-        ttk.Label(outputs, text="输出目录:").grid(row=0, column=0, sticky="w")
+        ttk.Label(outputs, text=i18n.t("lbl_output_dir")).grid(row=0, column=0, sticky="w")
         self.output_var = tk.StringVar()
         self.output_entry = ttk.Entry(outputs, textvariable=self.output_var)
         self.output_entry.grid(row=0, column=1, sticky="ew", padx=6)
-        self.output_browse = ttk.Button(outputs, text="浏览…", command=self._browse_output)
+        self.output_browse = ttk.Button(outputs, text=i18n.t("btn_browse"),
+                                        command=self._browse_output)
         self.output_browse.grid(row=0, column=2)
-        self.output_open = ttk.Button(outputs, text="打开", command=self._open_output)
+        self.output_open = ttk.Button(outputs, text=i18n.t("btn_open"),
+                                      command=self._open_output)
         self.output_open.grid(row=0, column=3, padx=(6, 0))
 
         self.overwrite_var = tk.BooleanVar(value=False)
         self.overwrite_check = ttk.Checkbutton(
-            outputs, text="覆盖已存在的输出文件", variable=self.overwrite_var)
+            outputs, text=i18n.t("chk_overwrite"), variable=self.overwrite_var)
         self.overwrite_check.grid(row=1, column=0, columnspan=4, sticky="w", pady=(8, 0))
 
         self.replace_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(
-            outputs,
-            text="覆盖源文件：输出到源目录同名 .sog，成功后把原文件移入回收站",
+            outputs, text=i18n.t("chk_replace"),
             variable=self.replace_var, command=self._on_replace_toggle,
         ).grid(row=2, column=0, columnspan=4, sticky="w", pady=(4, 0))
 
         # ---- compression ----------------------------------------------
-        options = ttk.LabelFrame(root, text=" 3. 压缩选项 ", padding=10)
+        options = ttk.LabelFrame(root, text=i18n.t("frame_options"), padding=10)
         options.grid(row=row, column=0, sticky="ew", pady=4)
         row += 1
 
-        ttk.Label(options, text="压缩点数:").grid(row=0, column=0, sticky="w")
+        ttk.Label(options, text=i18n.t("lbl_decimate")).grid(row=0, column=0, sticky="w")
         mode_frame = ttk.Frame(options)
         mode_frame.grid(row=0, column=1, columnspan=5, sticky="w", padx=6)
         self.mode_var = tk.StringVar(value="keep")
-        ttk.Radiobutton(mode_frame, text="保持原样", value="keep",
+        ttk.Radiobutton(mode_frame, text=i18n.t("radio_keep"), value="keep",
                         variable=self.mode_var, command=self._sync_mode).pack(side=tk.LEFT)
-        ttk.Radiobutton(mode_frame, text="指定数量", value="count",
+        ttk.Radiobutton(mode_frame, text=i18n.t("radio_count"), value="count",
                         variable=self.mode_var, command=self._sync_mode).pack(side=tk.LEFT, padx=(14, 0))
         self.count_entry = ttk.Entry(mode_frame, width=10)
         self.count_entry.insert(0, "400000")
         self.count_entry.pack(side=tk.LEFT, padx=(4, 0))
-        ttk.Radiobutton(mode_frame, text="保留百分比", value="percent",
+        ttk.Radiobutton(mode_frame, text=i18n.t("radio_percent"), value="percent",
                         variable=self.mode_var, command=self._sync_mode).pack(side=tk.LEFT, padx=(14, 0))
         self.percent_entry = ttk.Entry(mode_frame, width=6)
         self.percent_entry.insert(0, "50")
@@ -140,32 +164,37 @@ class ConverterApp(tk.Tk):
         ttk.Label(mode_frame, text="%").pack(side=tk.LEFT)
 
         self.filter_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(options, text="剔除极低透明度高斯 (opacity > 0.02，仅在减点时生效)",
-                        variable=self.filter_var).grid(row=1, column=0, columnspan=6, sticky="w", pady=(8, 0))
+        ttk.Checkbutton(options, text=i18n.t("chk_filter"),
+                        variable=self.filter_var).grid(
+                            row=1, column=0, columnspan=6, sticky="w", pady=(8, 0))
 
-        ttk.Label(options, text="WebP 压缩强度 (0–9):").grid(row=2, column=0, sticky="w", pady=(8, 0))
+        ttk.Label(options, text=i18n.t("lbl_webp")).grid(row=2, column=0, sticky="w", pady=(8, 0))
         self.effort_var = tk.StringVar(value="6")
-        ttk.Spinbox(options, from_=0, to=9, width=5, textvariable=self.effort_var).grid(
-            row=2, column=1, sticky="w", padx=6, pady=(8, 0))
+        ttk.Spinbox(options, from_=0, to=9, width=5,
+                    textvariable=self.effort_var).grid(
+                        row=2, column=1, sticky="w", padx=6, pady=(8, 0))
         self.cpu_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(options, text="强制 CPU 压缩（无可用 GPU 时勾选）",
-                        variable=self.cpu_var).grid(row=2, column=2, columnspan=4, sticky="w", pady=(8, 0))
+        ttk.Checkbutton(options, text=i18n.t("chk_cpu"),
+                        variable=self.cpu_var).grid(
+                            row=2, column=2, columnspan=4, sticky="w", pady=(8, 0))
 
         # ---- actions ---------------------------------------------------
         actions = ttk.Frame(root)
         actions.grid(row=row, column=0, sticky="ew", pady=(10, 6))
         row += 1
-        self.start_button = ttk.Button(actions, text="开始转换", command=self._start)
+        self.start_button = ttk.Button(actions, text=i18n.t("btn_start"),
+                                       command=self._start)
         self.start_button.pack(side=tk.LEFT)
-        self.cancel_button = ttk.Button(actions, text="取消", command=self._cancel, state=tk.DISABLED)
+        self.cancel_button = ttk.Button(actions, text=i18n.t("btn_cancel"),
+                                        command=self._cancel, state=tk.DISABLED)
         self.cancel_button.pack(side=tk.LEFT, padx=6)
         self.progress = ttk.Progressbar(actions, mode="determinate")
         self.progress.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=12)
-        self.status_var = tk.StringVar(value="就绪")
+        self.status_var = tk.StringVar(value=i18n.t("status_ready"))
         ttk.Label(actions, textvariable=self.status_var, width=16).pack(side=tk.RIGHT)
 
         # ---- log -------------------------------------------------------
-        log_frame = ttk.LabelFrame(root, text=" 日志 ", padding=6)
+        log_frame = ttk.LabelFrame(root, text=i18n.t("frame_log"), padding=6)
         log_frame.grid(row=row, column=0, sticky="nsew", pady=4)
         root.rowconfigure(row, weight=1)
         self.log_text = scrolledtext.ScrolledText(
@@ -174,7 +203,7 @@ class ConverterApp(tk.Tk):
             insertbackground="#dddddd",
         )
         self.log_text.pack(fill=tk.BOTH, expand=True)
-        self._log("提示: 首次使用请先安装 Node.js 与 @playcanvas/splat-transform（见 README）。")
+        self._log(i18n.t("log_hint"))
         self._sync_mode()
 
     # ------------------------------------------------------------- helpers
@@ -190,14 +219,14 @@ class ConverterApp(tk.Tk):
 
     def _refresh_cli_status(self) -> None:
         if not self.cli:
-            self.cli_label.configure(text="✗ 未找到 splat-transform", foreground="#c0392b")
+            self.cli_label.configure(text=i18n.t("cli_missing"), foreground="#c0392b")
             self.start_button.configure(state=tk.DISABLED)
-            self._log("错误: 未找到 splat-transform。请执行 npm install -g @playcanvas/splat-transform，"
-                      "或设置环境变量 SPLAT_TRANSFORM 指向可执行文件。")
+            self._log(i18n.t("log_cli_missing"))
             return
         version = core.cli_version(self.cli)
-        self.cli_label.configure(text=f"✓ {version}", foreground="#1d7a4d")
-        self._log(f"已找到转换工具: {self.cli} ({version})")
+        self.cli_label.configure(text=i18n.t("cli_ok", version=version),
+                                 foreground="#1d7a4d")
+        self._log(i18n.t("log_cli_found", cli=self.cli, version=version))
 
     def _sync_mode(self) -> None:
         mode = self.mode_var.get()
@@ -212,24 +241,25 @@ class ConverterApp(tk.Tk):
 
     def _add_files(self) -> None:
         paths = filedialog.askopenfilenames(
-            title="选择 3DGS 文件",
-            filetypes=[("3DGS 文件", "*.ply *.spz *.splat *.ksplat"), ("所有文件", "*.*")],
+            title=i18n.t("dlg_open_files"),
+            filetypes=[(i18n.t("dlg_filetypes"), "*.ply *.spz *.splat *.ksplat"),
+                       (i18n.t("dlg_all_files"), "*.*")],
         )
         for path in paths:
             if path not in self.input_list.get(0, tk.END):
                 self.input_list.insert(tk.END, path)
         if paths:
             self._autofill_output(paths[0])
-            self._log(f"已添加 {len(paths)} 个文件")
+            self._log(i18n.t("log_added_files", count=len(paths)))
 
     def _add_folder(self) -> None:
-        path = filedialog.askdirectory(title="选择包含 3DGS 文件的文件夹")
+        path = filedialog.askdirectory(title=i18n.t("dlg_open_folder"))
         if not path:
             return
         if path not in self.input_list.get(0, tk.END):
             self.input_list.insert(tk.END, path)
         self._autofill_output(path)
-        self._log(f"已添加文件夹: {path}")
+        self._log(i18n.t("log_added_folder", path=path))
 
     def _remove_selected(self) -> None:
         for index in reversed(self.input_list.curselection()):
@@ -239,18 +269,15 @@ class ConverterApp(tk.Tk):
         self.input_list.delete(0, tk.END)
 
     def _browse_output(self) -> None:
-        path = filedialog.askdirectory(title="选择输出目录")
+        path = filedialog.askdirectory(title=i18n.t("dlg_output"))
         if path:
             self.output_var.set(path)
 
     def _open_output(self) -> None:
         path = Path(self.output_var.get().strip() or ".")
         if not path.is_dir():
-            messagebox.showinfo(WINDOW_TITLE, "输出目录尚不存在。")
+            messagebox.showinfo(self.title_text, i18n.t("info_output_missing"))
             return
-        import subprocess
-        import sys
-
         try:
             if os.name == "nt":
                 os.startfile(str(path))  # type: ignore[attr-defined]
@@ -259,7 +286,7 @@ class ConverterApp(tk.Tk):
             else:
                 subprocess.Popen(["xdg-open", str(path)])
         except (AttributeError, OSError):
-            messagebox.showinfo(WINDOW_TITLE, str(path))
+            messagebox.showinfo(self.title_text, str(path))
 
     def _on_replace_toggle(self) -> None:
         enabled = self.replace_var.get()
@@ -272,10 +299,7 @@ class ConverterApp(tk.Tk):
             if not self._replace_warned:
                 self._replace_warned = True
                 ok = messagebox.askyesno(
-                    WINDOW_TITLE,
-                    "「覆盖源文件」会把转换结果写到原文件所在目录，并在转换成功后\n"
-                    "把原始文件移入系统回收站（可从回收站恢复）。\n\n"
-                    "建议先对少量文件试用，并保留原始素材备份。\n\n确定启用吗？",
+                    self.title_text, i18n.t("warn_replace_body"),
                     icon=messagebox.WARNING,
                 )
                 if not ok:
@@ -295,12 +319,12 @@ class ConverterApp(tk.Tk):
         if mode == "keep":
             value = 0
         elif not raw_value:
-            raise ValueError("请填写目标点数或保留百分比")
+            raise ValueError(i18n.t("err_no_points"))
         else:
             try:
                 value = int(raw_value)
             except ValueError as exc:
-                raise ValueError("点数与百分比必须是整数") from exc
+                raise ValueError(i18n.t("err_points_int")) from exc
 
         opts = core.Options(
             output_dir=Path(self.output_var.get().strip()) if self.output_var.get().strip() else None,
@@ -319,32 +343,31 @@ class ConverterApp(tk.Tk):
         if self.worker and self.worker.is_alive():
             return
         if not self.cli:
-            messagebox.showerror(WINDOW_TITLE, "未找到 splat-transform，请先安装（见 README）。")
+            messagebox.showerror(self.title_text, i18n.t("err_no_cli"))
             return
 
         paths = list(self.input_list.get(0, tk.END))
         if not paths:
-            messagebox.showwarning(WINDOW_TITLE, "请先添加文件或文件夹。")
+            messagebox.showwarning(self.title_text, i18n.t("warn_no_input"))
             return
         try:
             opts = self._build_options()
         except ValueError as exc:
-            messagebox.showwarning(WINDOW_TITLE, str(exc))
+            messagebox.showwarning(self.title_text, str(exc))
             return
 
         sources = core.collect_inputs(paths, recursive=self.recursive_var.get())
         if not sources:
-            messagebox.showwarning(WINDOW_TITLE, "未找到可转换的 .ply / .spz / .splat / .ksplat 文件。")
+            messagebox.showwarning(self.title_text, i18n.t("warn_no_sources"))
             return
         jobs = core.plan_jobs(sources, opts)
 
         if opts.replace_source:
             preview = "\n".join(str(p) for p in sources[:5])
-            more = f"\n… 共 {len(sources)} 个文件" if len(sources) > 5 else ""
+            more = ("\n" + i18n.t("confirm_more", count=len(sources))) if len(sources) > 5 else ""
             ok = messagebox.askyesno(
-                WINDOW_TITLE,
-                f"即将对 {len(sources)} 个文件执行「覆盖源文件」，原文件会被移入回收站：\n\n"
-                f"{preview}{more}\n\n确定继续吗？",
+                self.title_text,
+                i18n.t("confirm_replace_body", count=len(sources), preview=preview, more=more),
                 icon=messagebox.WARNING,
             )
             if not ok:
@@ -353,13 +376,13 @@ class ConverterApp(tk.Tk):
         self.log_text.configure(state=tk.NORMAL)
         self.log_text.delete("1.0", tk.END)
         self.log_text.configure(state=tk.DISABLED)
-        self._log(f"开始转换，共 {len(jobs)} 个任务。")
+        self._log(i18n.t("log_start", count=len(jobs)))
 
         self.cancel_event.clear()
         self.start_button.configure(state=tk.DISABLED)
         self.cancel_button.configure(state=tk.NORMAL)
         self.progress.configure(value=0, maximum=len(jobs))
-        self.status_var.set("转换中…")
+        self.status_var.set(i18n.t("status_running"))
 
         cli = self.cli
         self.worker = threading.Thread(
@@ -389,8 +412,8 @@ class ConverterApp(tk.Tk):
     def _cancel(self) -> None:
         if self.worker and self.worker.is_alive():
             self.cancel_event.set()
-            self.status_var.set("取消中…")
-            self._log("收到取消请求，等待当前步骤结束…")
+            self.status_var.set(i18n.t("status_cancelling"))
+            self._log(i18n.t("log_cancel_request"))
 
     def _poll_queue(self) -> None:
         try:
@@ -399,37 +422,32 @@ class ConverterApp(tk.Tk):
                 if kind == "log":
                     self._log(str(payload))
                 elif kind == "progress":
-                    done, total, result = payload
+                    done, total, _ = payload
                     self.progress.configure(value=done)
                     self.status_var.set(f"{done}/{total}")
                 elif kind == "done":
                     self._finish(payload)
                 elif kind == "cancelled":
-                    self._log("已取消。")
-                    self._reset_buttons("已取消")
+                    self._log(i18n.t("log_cancelled"))
+                    self._reset_buttons(i18n.t("status_cancelled"))
                 elif kind == "fatal":
-                    self._log(f"错误: {payload}")
-                    messagebox.showerror(WINDOW_TITLE, str(payload))
-                    self._reset_buttons("出错")
+                    self._log(i18n.t("log_error", message=payload))
+                    messagebox.showerror(self.title_text, str(payload))
+                    self._reset_buttons(i18n.t("status_error"))
         except queue.Empty:
             pass
-        self.after(80, self._poll_queue)
+        self._poll_after_id = self.after(80, self._poll_queue)
 
     def _finish(self, report: core.Report) -> None:
-        self._log(
-            f"全部完成：成功 {report.converted}，跳过 {report.skipped}，失败 {report.failed}，共 {report.total}。"
-        )
-        self._reset_buttons("完成")
+        self._log(i18n.t("log_finish", converted=report.converted,
+                         skipped=report.skipped, failed=report.failed,
+                         total=report.total))
+        self._reset_buttons(i18n.t("status_done"))
         if report.failed:
             messagebox.showwarning(
-                WINDOW_TITLE,
-                f"完成，但有 {report.failed} 个任务失败，请查看日志。",
-            )
+                self.title_text, i18n.t("warn_some_failed", failed=report.failed))
         elif report.skipped and not report.converted:
-            messagebox.showinfo(
-                WINDOW_TITLE,
-                "没有文件被转换（目标文件均已存在）。\n可勾选「覆盖已存在的输出文件」。",
-            )
+            messagebox.showinfo(self.title_text, i18n.t("info_all_skipped"))
 
     def _reset_buttons(self, status: str) -> None:
         self.start_button.configure(state=tk.NORMAL)

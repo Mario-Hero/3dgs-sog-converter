@@ -13,5 +13,6 @@ from .core import (  # noqa: F401
     plan_jobs,
     run_conversion,
 )
+from .i18n import get_language, set_language, t  # noqa: F401
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
