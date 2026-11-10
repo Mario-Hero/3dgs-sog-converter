@@ -1,0 +1,16 @@
+# Normalize line endings across platforms
+* text=auto
+
+# Shell scripts must keep LF, otherwise Linux/macOS cannot execute them
+*.sh text eol=lf
+
+# Windows batch files
+*.bat text eol=crlf
+
+# Sources and docs
+*.py text eol=lf
+*.md text eol=lf
+*.png binary
+LICENSE text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
