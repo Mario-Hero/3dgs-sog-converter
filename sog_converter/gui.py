@@ -123,6 +123,22 @@ class ConverterApp(tk.Tk):
 
         header = ttk.Frame(root)
         header.grid(row=row, column=0, sticky="ew", pady=(0, 10))
+
+        # ---- left: export format selector ----
+        self.format_keys = ["sog", "compressed_ply"]
+        self.format_values = [i18n.t("fmt_sog"), i18n.t("fmt_compressed_ply")]
+        self.format_var = tk.StringVar(value=self.format_values[0])
+        ttk.Label(header, text=i18n.t("lbl_format")).pack(side=tk.LEFT)
+        self.format_combo = ttk.Combobox(
+            header, values=self.format_values, textvariable=self.format_var,
+            state="readonly", width=26,
+        )
+        self.format_combo.pack(side=tk.LEFT, padx=(6, 0))
+
+        # spacer pushes the tool controls to the far right
+        ttk.Frame(header).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        # ---- right: tool locator ----
         self.cli_browse = ttk.Button(header, text=i18n.t("btn_locate_tool"),
                                      command=self._browse_cli)
         self.cli_browse.pack(side=tk.RIGHT, padx=(8, 0))
@@ -394,6 +410,7 @@ class ConverterApp(tk.Tk):
             except ValueError as exc:
                 raise ValueError(i18n.t("err_points_int")) from exc
 
+        fmt = self.format_keys[self.format_values.index(self.format_var.get())]
         opts = core.Options(
             output_dir=Path(self.output_var.get().strip()) if self.output_var.get().strip() else None,
             overwrite_existing=self.overwrite_var.get(),
@@ -403,6 +420,7 @@ class ConverterApp(tk.Tk):
             filter_low_opacity=self.filter_var.get(),
             webp_effort=int(self.effort_var.get()),
             use_cpu=self.cpu_var.get(),
+            output_format=fmt,
         )
         opts.validate()
         return opts

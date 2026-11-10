@@ -88,6 +88,19 @@ class PlanJobsTests(unittest.TestCase):
         jobs = core.plan_jobs(sources, core.Options(replace_source=True))
         self.assertEqual(jobs[0].target, Path("/a/one.sog"))
 
+    def test_compressed_ply_format_changes_extension(self):
+        sources = [Path("/a/one.ply")]
+        jobs = core.plan_jobs(
+            sources, core.Options(replace_source=True, output_format="compressed_ply")
+        )
+        self.assertEqual(jobs[0].target, Path("/a/one.compressed.ply"))
+
+    def test_output_suffix_helper(self):
+        self.assertEqual(core.output_suffix("sog"), ".sog")
+        self.assertEqual(core.output_suffix("compressed_ply"), ".compressed.ply")
+        # Unknown format keys fall back to SOG.
+        self.assertEqual(core.output_suffix("bogus"), ".sog")
+
 
 class RunConversionTests(unittest.TestCase):
     def test_skips_existing_output_without_calling_cli(self):

@@ -40,8 +40,19 @@ __all__ = [
 ]
 
 INPUT_SUFFIXES = {".ply", ".spz", ".splat", ".ksplat"}
-OUTPUT_SUFFIX = ".sog"
 TMP_MARKER = "__tmp__"
+
+
+def output_suffix(fmt: str) -> str:
+    """Return the file extension for a given output format key.
+
+    ``sog`` is the compact ZIP+WebP container; ``compressed_ply`` is
+    PlayCanvas' lossy-quantised + zstd ``.compressed.ply`` that stays a
+    genuine PLY file.
+    """
+    if fmt == "compressed_ply":
+        return ".compressed.ply"
+    return ".sog"
 
 LogFn = Callable[[str], None]
 CancelFn = Callable[[], None]
@@ -75,6 +86,7 @@ class Options:
     filter_low_opacity: bool = True
     webp_effort: int = 6
     use_cpu: bool = False
+    output_format: str = "sog"  # sog | compressed_ply
 
     def decimate_arg(self) -> Optional[str]:
         if self.decimate_mode == "keep":
@@ -319,21 +331,22 @@ def collect_inputs(paths: Iterable[str | Path], recursive: bool = True) -> List[
 
 def plan_jobs(sources: Sequence[Path], opts: Options) -> List[Job]:
     """Compute output paths, de-duplicating collisions inside one batch."""
+    suffix = output_suffix(opts.output_format)
     jobs: List[Job] = []
     used: set = set()
     for source in sources:
         if opts.replace_source:
-            target = source.with_suffix(OUTPUT_SUFFIX)
+            target = source.with_suffix(suffix)
             out_dir = source.parent
         else:
             out_dir = Path(opts.output_dir)
-            target = out_dir / (source.stem + OUTPUT_SUFFIX)
+            target = out_dir / (source.stem + suffix)
 
         key = str(target.resolve()).lower()
         if key in used:
             index = 2
             while True:
-                candidate = out_dir / f"{source.stem}_{index}{OUTPUT_SUFFIX}"
+                candidate = out_dir / f"{source.stem}_{index}{suffix}"
                 if str(candidate.resolve()).lower() not in used:
                     target = candidate
                     used.add(str(target.resolve()).lower())
@@ -390,7 +403,7 @@ def _convert_job(
     if not opts.overwrite_existing and target.exists():
         return Result(source, target, "skipped", i18n.t("skip_exists"))
 
-    tmp_out = target.with_name(f".{target.stem}.{TMP_MARKER}{OUTPUT_SUFFIX}")
+    tmp_out = target.with_name(f".{target.stem}.{TMP_MARKER}{output_suffix(opts.output_format)}")
     if tmp_out.exists():
         tmp_out.unlink()
 
@@ -418,7 +431,8 @@ def _convert_job(
             cmd = [cli]
             if opts.use_cpu:
                 cmd += ["-g", "cpu"]
-            cmd += ["--webp-effort", str(int(opts.webp_effort))]
+            if opts.output_format == "sog":
+                cmd += ["--webp-effort", str(int(opts.webp_effort))]
             cmd += [str(sog_source), str(tmp_out)]
             log(i18n.t("log_step2") if decimate else i18n.t("log_step_single"))
             _run(cmd, log, cancel)
@@ -430,7 +444,7 @@ def _convert_job(
         size_mb = target.stat().st_size / 1048576
         message = i18n.t("done", name=target.name, size=size_mb)
 
-        if opts.replace_source and source.suffix.lower() != OUTPUT_SUFFIX:
+        if opts.replace_source and source.suffix.lower() != output_suffix(opts.output_format):
             try:
                 source.unlink()
                 message += i18n.t("deleted")

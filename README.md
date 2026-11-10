@@ -7,6 +7,9 @@ A small open-source desktop GUI for batch-converting 3D Gaussian Splatting scene
 支持 `.ply`（含 `.compressed.ply`）、`.spz`、`.splat`、`.ksplat`。
 Supported: `.ply` (including `.compressed.ply`), `.spz`, `.splat`, `.ksplat`.
 
+界面左上角可在两种导出格式之间切换：**压缩 SOG (.sog)** 或 **压缩 PLY (.compressed.ply)**。
+Pick the export format from the top-left of the window: **Compressed SOG (.sog)** or **Compressed PLY (.compressed.ply)**.
+
 ![中文界面](assets/screenshot-zh.png)  
 ![English UI](assets/screenshot-en.png)
 
