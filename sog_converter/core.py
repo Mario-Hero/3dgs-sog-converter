@@ -10,7 +10,6 @@ User-facing strings are translated through :mod:`sog_converter.i18n`.
 
 from __future__ import annotations
 
-import ctypes
 import glob
 import json
 import os
@@ -380,50 +379,6 @@ def _run(cmd: Sequence[str], log: LogFn, cancel: CancelFn) -> None:
         raise ConversionError(i18n.t("err_exit_code", code=return_code))
 
 
-def send_to_trash(path: Path) -> bool:
-    """Move a file to the OS recycle bin. Returns False when unsupported."""
-    if os.name != "nt":
-        return False
-
-    from ctypes import wintypes
-
-    class SHFILEOPSTRUCTW(ctypes.Structure):
-        _fields_ = [
-            ("hwnd", wintypes.HWND),
-            ("wFunc", wintypes.UINT),
-            ("pFrom", wintypes.LPCWSTR),
-            ("pTo", wintypes.LPCWSTR),
-            ("fFlags", ctypes.c_uint16),
-            ("fAnyOperationsAborted", wintypes.BOOL),
-            ("hNameMappings", ctypes.c_void_p),
-            ("lpszProgressTitle", wintypes.LPCWSTR),
-        ]
-
-    FO_DELETE = 3
-    FOF_SILENT = 0x0004
-    FOF_NOCONFIRMATION = 0x0010
-    FOF_ALLOWUNDO = 0x0040
-    FOF_NOERRORUI = 0x0400
-
-    # pFrom must be double-NUL terminated; create_unicode_buffer adds the last one.
-    buffer = ctypes.create_unicode_buffer(str(path.resolve()) + "\0")
-    op = SHFILEOPSTRUCTW()
-    op.hwnd = None
-    op.wFunc = FO_DELETE
-    op.pFrom = ctypes.cast(buffer, wintypes.LPCWSTR)
-    op.pTo = None
-    op.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI
-    op.fAnyOperationsAborted = False
-    op.hNameMappings = None
-    op.lpszProgressTitle = None
-
-    try:
-        result = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(op))
-        return result == 0 and not op.fAnyOperationsAborted
-    except (AttributeError, OSError):
-        return False
-
-
 def _convert_job(
     job: Job, opts: Options, cli: str, log: LogFn, cancel: CancelFn
 ) -> Result:
@@ -476,10 +431,11 @@ def _convert_job(
         message = i18n.t("done", name=target.name, size=size_mb)
 
         if opts.replace_source and source.suffix.lower() != OUTPUT_SUFFIX:
-            if send_to_trash(source):
-                message += i18n.t("trashed")
-            else:
-                message += i18n.t("not_trashed")
+            try:
+                source.unlink()
+                message += i18n.t("deleted")
+            except OSError as exc:
+                message += i18n.t("delete_failed", error=exc)
             log(i18n.t("warn_replace"))
         return Result(source, target, "converted", message)
 

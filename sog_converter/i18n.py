@@ -37,8 +37,8 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "skip_same_file": "输出与输入为同一文件",
         "skip_exists": "目标文件已存在（未勾选覆盖）",
         "done": "完成 -> {name} ({size:.2f} MB)",
-        "trashed": "；原文件已移入回收站",
-        "not_trashed": "；原文件未删除（回收站不可用，请手动处理）",
+        "deleted": "；原文件已删除",
+        "delete_failed": "；原文件删除失败：{error}",
         "warn_replace": "  警告: 覆盖源文件模式已启用",
         "log_step1": "[1/2] 减点 -> {value}",
         "log_step2": "[2/2] 编码 SOG",
@@ -67,7 +67,7 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "btn_browse": "浏览…",
         "btn_open": "打开",
         "chk_overwrite": "覆盖已存在的输出文件",
-        "chk_replace": "覆盖源文件：输出到源目录同名 .sog，成功后把原文件移入回收站",
+        "chk_replace": "覆盖源文件：输出到源目录同名 .sog，成功后删除原文件",
         "lbl_decimate": "压缩点数:",
         "radio_keep": "保持原样",
         "radio_count": "指定数量",
@@ -97,11 +97,11 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "err_points_int": "点数与百分比必须是整数",
         "warn_replace_body": (
             "「覆盖源文件」会把转换结果写到原文件所在目录，并在转换成功后\n"
-            "把原始文件移入系统回收站（可从回收站恢复）。\n\n"
+            "直接删除原始文件（不可恢复）。\n\n"
             "建议先对少量文件试用，并保留原始素材备份。\n\n确定启用吗？"
         ),
         "confirm_replace_body": (
-            "即将对 {count} 个文件执行「覆盖源文件」，原文件会被移入回收站：\n\n"
+            "即将对 {count} 个文件执行「覆盖源文件」，原始文件会被直接删除（不可恢复）：\n\n"
             "{preview}{more}\n\n确定继续吗？"
         ),
         "confirm_more": "… 共 {count} 个文件",
@@ -143,8 +143,8 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "skip_same_file": "Output and input are the same file",
         "skip_exists": "Target already exists (overwrite is off)",
         "done": "Done -> {name} ({size:.2f} MB)",
-        "trashed": "; original file moved to Recycle Bin",
-        "not_trashed": "; original file kept (Recycle Bin unavailable, remove it manually)",
+        "deleted": "; original file deleted",
+        "delete_failed": "; failed to delete original file: {error}",
         "warn_replace": "  Warning: replace-source mode is enabled",
         "log_step1": "[1/2] Decimate -> {value}",
         "log_step2": "[2/2] Encode SOG",
@@ -173,7 +173,7 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "btn_browse": "Browse…",
         "btn_open": "Open",
         "chk_overwrite": "Overwrite existing output files",
-        "chk_replace": "Replace source: write a same-named .sog next to the source, then move the original to Recycle Bin",
+        "chk_replace": "Replace source: write a same-named .sog next to the source, then delete the original file",
         "lbl_decimate": "Splat count:",
         "radio_keep": "Keep all",
         "radio_count": "Target count",
@@ -203,12 +203,12 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "err_points_int": "Counts and percentages must be integers",
         "warn_replace_body": (
             "Replace-source mode writes the output next to each source file and,\n"
-            "after a successful conversion, moves the original file to the Recycle Bin\n"
-            "(recoverable).\n\n"
+            "after a successful conversion, permanently deletes the original file\n"
+            "(not recoverable).\n\n"
             "Try it on a few files first and keep a separate backup of your source assets.\n\nContinue?"
         ),
         "confirm_replace_body": (
-            "Replace-source mode will run on {count} file(s). Originals will be moved to the Recycle Bin:\n\n"
+            "Replace-source mode will run on {count} file(s). Originals will be permanently deleted (not recoverable):\n\n"
             "{preview}{more}\n\nContinue?"
         ),
         "confirm_more": "… {count} files total",
